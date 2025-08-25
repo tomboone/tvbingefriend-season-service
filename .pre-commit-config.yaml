@@ -1,13 +1,28 @@
 repos:
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+-   repo: local
     hooks:
     -   id: ruff
-        args: [--fix]
-        files: ^tvbingefriend_season_service/
--   repo: https://github.com/PyCQA/bandit
-    rev: 1.7.8
-    hooks:
+        name: ruff
+        entry: arch -arm64 poetry run ruff check --fix
+        language: system
+        types: [python]
+        args: [tvbingefriend_season_service/]
+        pass_filenames: false
+    -   id: mypy
+        name: mypy
+        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" arch -arm64 poetry run mypy tvbingefriend_season_service/'
+        language: system
+        types: [python]
+        pass_filenames: false
     -   id: bandit
-        args: [-r]
-        files: ^tvbingefriend_season_service/
+        name: bandit
+        entry: arch -arm64 poetry run bandit -r tvbingefriend_season_service/
+        language: system
+        types: [python]
+        pass_filenames: false
+    -   id: pytest
+        name: pytest
+        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" arch -arm64 poetry run pytest tests/'
+        language: system
+        types: [python]
+        pass_filenames: false
