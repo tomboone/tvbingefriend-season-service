@@ -3,26 +3,26 @@ repos:
     hooks:
     -   id: ruff
         name: ruff
-        entry: poetry run ruff check --fix
+        entry: arch -arm64 poetry run ruff check --fix
         language: system
         types: [python]
         args: [tvbingefriend_season_service/]
         pass_filenames: false
     -   id: mypy
         name: mypy
-        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" poetry run mypy tvbingefriend_season_service/'
+        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" arch -arm64 poetry run mypy tvbingefriend_season_service/'
         language: system
         types: [python]
         pass_filenames: false
     -   id: bandit
         name: bandit
-        entry: poetry run bandit -r tvbingefriend_season_service/
+        entry: arch -arm64 poetry run bandit -r tvbingefriend_season_service/
         language: system
         types: [python]
         pass_filenames: false
     -   id: pytest
         name: pytest
-        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" poetry run pytest tests/'
+        entry: bash -c 'SQLALCHEMY_CONNECTION_STRING="sqlite:///:memory:" arch -arm64 poetry run pytest tests/'
         language: system
         types: [python]
         pass_filenames: false
