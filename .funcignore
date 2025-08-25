@@ -1,0 +1,27 @@
+# Git and GitHub
+.git/
+.github/
+
+# Terraform
+terraform/
+
+# Alembic
+alembic/
+alembic.ini
+
+# Python virtual environment and cache
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Local development settings
+local.settings.json
+
+# IDE and editor configuration
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store

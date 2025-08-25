@@ -1,0 +1,35 @@
+[project]
+name = "tvbingefriend-season-service"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Tom Boone",email = "tbc@tomboone.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy (>=2.0.43,<3.0.0)",
+    "pymysql (>=1.1.2,<2.0.0)",
+    "tvbingefriend-tvmaze-client (>=0.1.6,<0.2.0)",
+    "tvbingefriend-azure-storage-service (>=0.1.2,<0.2.0)",
+    "alembic (>=1.16.4,<2.0.0)",
+    "azure-functions (>=1.23.0,<2.0.0)"
+]
+
+[[tool.poetry.source]]
+name = "TBC_Feed"
+url = "https://pkgs.dev.azure.com/tomboonedotcom/BingeFriend/_packaging/TBC_Feed/pypi/simple/"
+priority = "primary"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+mypy = "^1.17.1"
+ruff = "^0.12.10"
+bandit = "^1.8.6"
+pre-commit = "^4.3.0"
+pytest-cov = "^6.2.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
