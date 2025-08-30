@@ -1,0 +1,176 @@
+#file: noinspection UndefinedAction,UndefinedParamsPresent
+name: Promote Stage to Production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_USE_OIDC: true
+  TF_VAR_tf_shared_resource_group_name: ${{ secrets.TF_STATE_RESOURCE_GROUP_NAME }}
+  TF_VAR_tf_shared_storage_account_name: ${{ secrets.TF_STATE_STORAGE_ACCOUNT_NAME }}
+  TF_VAR_tf_shared_container_name: ${{ secrets.TF_STATE_CONTAINER_NAME }}
+  TF_VAR_tf_shared_key: ${{ secrets.TF_STATE_KEY }}
+  TF_VAR_mysql_admin_username: ${{ secrets.MYSQL_ADMIN_USERNAME }}
+  TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
+  TF_WORKING_DIR: ./terraform
+
+
+jobs:
+  terraform-outputs:
+    runs-on: ubuntu-latest
+    outputs:
+      function_app_name: ${{ steps.get_outputs.outputs.function_app_name }}
+      function_app_resource_group_name: ${{ steps.get_outputs.outputs.function_app_resource_group_name }}
+      function_app_python_version: ${{ steps.get_outputs.outputs.function_app_python_version }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_wrapper: false
+
+    - name: Get Terraform outputs
+      id: get_outputs
+      working-directory: ${{ env.TF_WORKING_DIR }}
+      run: |
+        terraform init \
+          -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+          -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
+          -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+          -backend-config="key=${{ secrets.TF_STATE_KEY }}"
+
+        FUNCTION_APP_NAME=$(terraform output -raw function_app_name)
+        RG_NAME=$(terraform output -raw function_app_resource_group_name)
+        PYTHON_VERSION=$(terraform output -raw function_app_python_version)
+
+        echo "function_app_name=$FUNCTION_APP_NAME" >> $GITHUB_OUTPUT
+        echo "function_app_resource_group_name=$RG_NAME" >> $GITHUB_OUTPUT
+        echo "function_app_python_version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
+
+  promote-to-production:
+    runs-on: ubuntu-latest
+    environment: production
+    needs: terraform-outputs
+    env:
+      FUNCTION_APP_NAME: ${{ needs.terraform-outputs.outputs.function_app_name }}
+      RG_NAME: ${{ needs.terraform-outputs.outputs.function_app_resource_group_name }}
+      PYTHON_VERSION: ${{ needs.terraform-outputs.outputs.function_app_python_version }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ env.ARM_CLIENT_ID }}
+        tenant-id: ${{ env.ARM_TENANT_ID }}
+        subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
+    - name: Swap deployment slots
+      run: |
+        echo "Swapping stage and production slots..."
+        echo "Function app: ${{ env.FUNCTION_APP_NAME }}"
+        echo "Resource group: ${{ env.RG_NAME }}"
+        
+        az functionapp deployment slot swap \
+          --name "${{ env.FUNCTION_APP_NAME }}" \
+          --resource-group "${{ env.RG_NAME }}" \
+          --slot "stage" \
+          --target-slot "production"
+        
+        echo "✅ Successfully swapped stage -> production"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        installer-parallel: true
+
+    - name: Configure private repository authentication
+      run: poetry config http-basic.TBC_Feed pat ${{ secrets.AZURE_DEVOPS_PAT }}
+
+    - name: Install Python dependencies for migration
+      run: poetry install --only=main
+
+    - name: Run production database migrations
+      run: |
+        echo "Fetching database connection string from production slot..."
+        echo "Using resource group: ${{ env.RG_NAME }}"
+        echo "Function app name: ${{ env.FUNCTION_APP_NAME }}"
+        
+        # Get production app settings (now populated after swap)
+        SETTINGS=$(az functionapp config appsettings list \
+          --name "${{ env.FUNCTION_APP_NAME }}" \
+          --resource-group "${{ env.RG_NAME }}" \
+          --output json)
+        
+        CONNECTION_STRING=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="SQLALCHEMY_CONNECTION_STRING") | .value')
+        SSL_CA_CONTENT=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="MYSQL_SSL_CA_CONTENT") | .value')
+        
+        if [[ -z "$CONNECTION_STRING" || "$CONNECTION_STRING" == "null" ]]; then
+          echo "::error::SQLALCHEMY_CONNECTION_STRING not found in production app settings"
+          exit 1
+        fi
+        
+        if [[ -z "$SSL_CA_CONTENT" || "$SSL_CA_CONTENT" == "null" ]]; then
+          echo "::error::MYSQL_SSL_CA_CONTENT not found in production app settings"
+          exit 1
+        fi
+        
+        echo "Running Alembic migrations on Production DB..."
+        export SQLALCHEMY_CONNECTION_STRING="$CONNECTION_STRING"
+        export MYSQL_SSL_CA_CONTENT="$SSL_CA_CONTENT"
+        
+        # Run migration from the repo root where alembic.ini exists
+        poetry run python -m alembic -c alembic.ini upgrade head
+
+    - name: Verify production deployment
+      run: |
+        echo "Waiting 30 seconds for deployment to stabilize..."
+        sleep 30
+        
+        # Get production function app URL
+        FUNCTION_URL=$(az functionapp show \
+          --name "${{ env.FUNCTION_APP_NAME }}" \
+          --resource-group "${{ env.RG_NAME }}" \
+          --query "defaultHostName" \
+          --output tsv)
+        
+        echo "Production URL: https://$FUNCTION_URL"
+        echo "Deployment completed successfully!"
+        
+        # Optional: Add health check if you have a health endpoint
+        # curl -f "https://$FUNCTION_URL/api/health" || echo "::warning::Health check failed"
+
+    - name: Post-deployment summary
+      if: always()
+      run: |
+        echo "## 🚀 Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Function App**: ${{ env.FUNCTION_APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Resource Group**: ${{ env.RG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Migrations**: Executed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ job.status }}" == "success" ]]; then
+          echo "Stage environment has been successfully promoted to production!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Deployment failed. Production environment unchanged." >> $GITHUB_STEP_SUMMARY
+        fi

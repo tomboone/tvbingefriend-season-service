@@ -1,0 +1,198 @@
+#file: noinspection UndefinedAction
+name: Terraform, Build, and Deploy to Stage
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - 'tvbingefriend_season_service/**'
+      - 'pyproject.toml'
+      - 'alembic/**'
+      - 'alembic.ini'
+      - 'function_app.py'
+      - '.github/workflows/build-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: true
+  TF_VAR_tf_shared_resource_group_name: ${{ secrets.TF_SHARED_RESOURCE_GROUP_NAME }}
+  TF_VAR_tf_shared_storage_account_name: ${{ secrets.TF_SHARED_STORAGE_ACCOUNT_NAME }}
+  TF_VAR_tf_shared_container_name: ${{ secrets.TF_SHARED_CONTAINER_NAME }}
+  TF_VAR_tf_shared_key: ${{ secrets.TF_SHARED_KEY }}
+  TF_VAR_mysql_admin_username: ${{ secrets.MYSQL_ADMIN_USER }}
+  TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
+  TF_WORKING_DIR: ./terraform
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    outputs:
+      function_app_name: ${{ steps.get_outputs.outputs.function_app_name }}
+      function_app_resource_group_name: ${{ steps.get_outputs.outputs.function_app_resource_group_name }}
+      function_app_python_version: ${{ steps.get_outputs.outputs.function_app_python_version }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ secrets.TF_STATE_KEY }}"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve
+
+      - name: Get Terraform Outputs
+        id: get_outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          APP_NAME=$(terraform output -raw function_app_name)
+          RG_NAME=$(terraform output -raw function_app_resource_group_name)
+          PYTHON_VERSION=$(terraform output -raw function_app_python_version)
+          
+          echo "function_app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "function_app_resource_group_name=$RG_NAME" >> "$GITHUB_OUTPUT"
+          echo "function_app_python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: terraform
+    env:
+      PYTHON_VERSION: ${{ needs.terraform.outputs.function_app_python_version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Configure Poetry to build locally
+        run: poetry config virtualenvs.in-project true
+
+      - name: Configure private repository authentication
+        run: poetry config http-basic.TBC_Feed pat ${{ secrets.AZURE_DEVOPS_PAT }}
+
+      - name: Build with Poetry
+        run: poetry install --without dev
+
+      - name: Construct deployment artifact
+        run: |
+          VENV_PATH=$(poetry env info --path)
+          mkdir -p deployment_package/.python_packages/lib/site-packages
+          cp -r $VENV_PATH/lib/python*/site-packages/* deployment_package/.python_packages/lib/site-packages/
+          cp function_app.py host.json alembic.ini deployment_package/
+          cp -r alembic tvbingefriend_show_service deployment_package/
+
+      - name: Zip artifact for deployment
+        run: |
+          cd deployment_package
+          zip -r ../python-app.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-app
+          path: python-app.zip
+
+  deploy-stage:
+    name: Deploy to Stage
+    runs-on: ubuntu-latest
+    environment: staging
+    needs: [build, terraform]
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
+      - name: Unzip deployment artifact
+        run: unzip python-app.zip -d app
+
+      - name: Deploy to Stage Slot
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ needs.terraform.outputs.function_app_name }}
+          slot-name: 'stage'
+          package: 'app'
+
+      - name: Run Alembic Migrations on Stage DB
+        run: |
+          echo "Fetching database connection string from stage slot..."
+          FUNCTION_APP_NAME="${{ needs.terraform.outputs.function_app_name }}"
+          RG_NAME="${{ needs.terraform.outputs.function_app_resource_group_name }}"
+          
+          echo "Using resource group: $RG_NAME"
+          echo "Function app name: $FUNCTION_APP_NAME"
+          
+          SETTINGS=$(az functionapp config appsettings list \
+            --name "$FUNCTION_APP_NAME" \
+            --slot "stage" \
+            --resource-group "$RG_NAME")
+            
+          CONNECTION_STRING=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="SQLALCHEMY_CONNECTION_STRING") | .value')
+          SSL_CA_CONTENT=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="MYSQL_SSL_CA_CONTENT") | .value')
+          
+          if [[ -z "$CONNECTION_STRING" || "$CONNECTION_STRING" == "null" ]]; then
+            echo "::error::SQLALCHEMY_CONNECTION_STRING not found in app settings"
+            exit 1
+          fi
+          
+          if [[ -z "$SSL_CA_CONTENT" || "$SSL_CA_CONTENT" == "null" ]]; then
+            echo "::error::MYSQL_SSL_CA_CONTENT not found in app settings"
+            exit 1
+          fi
+          
+          echo "Running Alembic migrations on Stage DB..."
+          export PYTHONPATH=$(pwd)/app/.python_packages/lib/site-packages
+          export SQLALCHEMY_CONNECTION_STRING="$CONNECTION_STRING"
+          export MYSQL_SSL_CA_CONTENT="$SSL_CA_CONTENT"
+          
+          cd app
+      
+          python -m alembic -c alembic.ini upgrade head
