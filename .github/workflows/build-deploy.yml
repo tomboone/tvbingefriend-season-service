@@ -119,7 +119,7 @@ jobs:
           mkdir -p deployment_package/.python_packages/lib/site-packages
           cp -r $VENV_PATH/lib/python*/site-packages/* deployment_package/.python_packages/lib/site-packages/
           cp function_app.py host.json alembic.ini deployment_package/
-          cp -r alembic tvbingefriend_show_service deployment_package/
+          cp -r alembic tvbingefriend_season_service deployment_package/
 
       - name: Zip artifact for deployment
         run: |
