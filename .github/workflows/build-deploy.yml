@@ -84,7 +84,7 @@ jobs:
           
           echo "function_app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
           echo "function_app_resource_group_name=$RG_NAME" >> "$GITHUB_OUTPUT"
-          echo "function_app_python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT
+          echo "function_app_python_version=$PYTHON_VERSION" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build Application
