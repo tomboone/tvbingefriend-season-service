@@ -212,7 +212,7 @@ resource "azurerm_linux_function_app_slot" "stage" {
     "TIMER_TRIGGER_SCHEDULE"       = "disabled"
     "MYSQL_SSL_CA_CONTENT"         = local.mysql_ca_cert_content
     "SQLALCHEMY_CONNECTION_STRING" = "mysql+pymysql://${mysql_user.stage_user.user}:${random_password.stage_db_password.result}@${data.azurerm_mysql_flexible_server.existing.fqdn}:3306/${azurerm_mysql_flexible_database.stage.name}?charset=${azurerm_mysql_flexible_database.stage.charset}&ssl_disabled=false&ssl_verify_cert=false&ssl_verify_identity=false"
-    "INDEX_QUEUE"                  = local.storage_queues["seasons-queue-stage"]
+    "SEASONS_QUEUE"                  = local.storage_queues["seasons-queue-stage"]
     "SHOW_IDS_TABLE"               = local.storage_tables["showidstablestage"]
     "UPDATES_NCRON"                = "0 0 1 1 1 *"
   }
