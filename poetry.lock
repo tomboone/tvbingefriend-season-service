@@ -1799,14 +1799,14 @@ reference = "TBC_Feed"
 
 [[package]]
 name = "tvbingefriend-azure-storage-service"
-version = "0.1.2"
+version = "0.1.3"
 description = ""
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "tvbingefriend_azure_storage_service-0.1.2-py3-none-any.whl", hash = "sha256:60234b1aed96d05d7c643880d8a60a66207a492fdf3e75d953c141d008933af5"},
-    {file = "tvbingefriend_azure_storage_service-0.1.2.tar.gz", hash = "sha256:8894de34abdf7475618f651754508e9d41d9999d8e820d827ba29c06b189e353"},
+    {file = "tvbingefriend_azure_storage_service-0.1.3-py3-none-any.whl", hash = "sha256:c102dc13ea15ae49af5bf8893980253da0029acd6019ef2899cd4760f3987e93"},
+    {file = "tvbingefriend_azure_storage_service-0.1.3.tar.gz", hash = "sha256:f33095f49567554f8795bc8941d9aa2c60732f175f82aee1602fa5f6bec564eb"},
 ]
 
 [package.dependencies]
