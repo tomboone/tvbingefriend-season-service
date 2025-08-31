@@ -49,7 +49,7 @@ STORAGE_CONNECTION_STRING: str | None = _get_setting(STORAGE_CONNECTION_SETTING_
 SQLALCHEMY_CONNECTION_STRING: str = _get_setting("SQLALCHEMY_CONNECTION_STRING")
 MYSQL_SSL_CA_CONTENT: str = _get_setting("MYSQL_SSL_CA_CONTENT", required=False)
 
-SEASONS_QUEUE: str = _get_setting("INDEX_QUEUE", default="index-queue")
+SEASONS_QUEUE: str = _get_setting("SEASONS_QUEUE", default="seasons-queue")
 
 SHOW_IDS_TABLE: str = _get_setting("SHOW_IDS_TABLE", default="show_ids_table")
 
