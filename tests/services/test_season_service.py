@@ -49,13 +49,19 @@ class TestSeasonService(unittest.TestCase):
 
     def test_start_get_all_shows_seasons(self):
         """Test starting the process of getting all shows' seasons."""
-        # Mock show entities returned from storage
+        # Mock show entities returned from table client
         mock_show_entities = [
             {"RowKey": "1", "PartitionKey": "show"},
             {"RowKey": "2", "PartitionKey": "show"},
             {"RowKey": "3", "PartitionKey": "show"}
         ]
-        self.service.storage_service.get_entities.return_value = mock_show_entities
+        
+        # Mock the table service client chain
+        mock_table_service_client = MagicMock()
+        mock_table_client = MagicMock()
+        mock_table_service_client.get_table_client.return_value = mock_table_client
+        mock_table_client.query_entities.return_value = iter(mock_show_entities)
+        self.service.storage_service.get_table_service_client.return_value = mock_table_service_client
         
         import_id = self.service.start_get_all_shows_seasons()
         
@@ -63,9 +69,9 @@ class TestSeasonService(unittest.TestCase):
         self.service.monitoring_service.start_show_seasons_import_tracking.assert_called_once()
         call_args = self.service.monitoring_service.start_show_seasons_import_tracking.call_args[1]
         self.assertEqual(call_args['show_id'], -1)  # Placeholder for bulk operation
-        self.assertEqual(call_args['estimated_seasons'], 3)  # Number of shows
+        self.assertEqual(call_args['estimated_seasons'], -1)  # Updated for batched processing
         
-        # Verify all shows were queued
+        # Verify all shows were queued (3 shows + potentially 1 batch message, but since < batch_size, no next batch)
         self.assertEqual(self.service.storage_service.upload_queue_message.call_count, 3)
         expected_calls = [
             call(queue_name=SEASONS_QUEUE, message={"show_id": 1, "import_id": import_id}),
@@ -74,25 +80,38 @@ class TestSeasonService(unittest.TestCase):
         ]
         self.service.storage_service.upload_queue_message.assert_has_calls(expected_calls, any_order=True)
         
-        # Verify entities were fetched from correct table
-        self.service.storage_service.get_entities.assert_called_once_with(
-            table_name=SHOW_IDS_TABLE,
-            filter_query="PartitionKey eq 'show'"
+        # Verify table client was called
+        mock_table_client.query_entities.assert_called_once_with(
+            query_filter="PartitionKey eq 'show'",
+            results_per_page=1000
         )
 
     def test_start_get_all_shows_seasons_no_shows(self):
         """Test starting seasons import when no shows exist."""
-        self.service.storage_service.get_entities.return_value = []
+        # Mock empty result from table client
+        mock_table_service_client = MagicMock()
+        mock_table_client = MagicMock()
+        mock_table_service_client.get_table_client.return_value = mock_table_client
+        mock_table_client.query_entities.return_value = iter([])  # Empty iterator
+        self.service.storage_service.get_table_service_client.return_value = mock_table_service_client
         
         import_id = self.service.start_get_all_shows_seasons()
         
         # Should still return import ID but not queue anything
         self.assertIsNotNone(import_id)
         self.service.storage_service.upload_queue_message.assert_not_called()
+        
+        # Should complete import as completed
+        self.service.monitoring_service.complete_show_seasons_import.assert_called_once()
 
     def test_start_get_all_shows_seasons_exception(self):
         """Test exception handling in start_get_all_shows_seasons."""
-        self.service.storage_service.get_entities.side_effect = Exception("Storage error")
+        # Mock table service client to raise exception
+        mock_table_service_client = MagicMock()
+        mock_table_client = MagicMock()
+        mock_table_service_client.get_table_client.return_value = mock_table_client
+        mock_table_client.query_entities.side_effect = Exception("Storage error")
+        self.service.storage_service.get_table_service_client.return_value = mock_table_service_client
         
         with self.assertRaises(Exception):
             self.service.start_get_all_shows_seasons()
