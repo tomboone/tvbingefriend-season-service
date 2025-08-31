@@ -42,6 +42,9 @@ class SeasonService:
     def start_get_all_shows_seasons(self) -> str:
         """Start getting all seasons for all shows from the SHOW_IDS_TABLE using batched processing.
         
+        This method initiates the process by creating tracking and queuing the first batch message.
+        The actual work is done asynchronously through queue messages.
+        
         Returns:
             Import ID for tracking progress
         """
@@ -61,21 +64,34 @@ class SeasonService:
                 estimated_seasons=-1  # Will be updated as batches are processed
             )
             
-            # Start the first batch
-            return self._process_shows_batch(import_id=import_id, batch_number=0)
+            # Queue the first batch processing message instead of doing the work synchronously
+            first_batch_message = {
+                "import_id": import_id,
+                "batch_number": 0,
+                "batch_size": 100,
+                "action": "process_batch"
+            }
+            
+            self.storage_service.upload_queue_message(
+                queue_name=SEASONS_QUEUE,
+                message=first_batch_message
+            )
+            
+            logging.info(f"Queued first batch processing message for import {import_id}")
+            return import_id
             
         except Exception as e:
             logging.error(f"Failed to start season import: {e}")
             self.monitoring_service.complete_show_seasons_import(import_id, ImportStatus.FAILED)
             raise
 
-    def _process_shows_batch(self, import_id: str, batch_number: int, batch_size: int = 1000) -> str:
-        """Process a batch of shows for season retrieval.
+    def _process_shows_batch(self, import_id: str, batch_number: int, batch_size: int = 100) -> str:
+        """Process a batch of shows for season retrieval using efficient offset-based pagination.
         
         Args:
             import_id: Import operation identifier
             batch_number: Current batch number (0-based)
-            batch_size: Number of shows to process in this batch
+            batch_size: Number of shows to process in this batch (reduced to 100 for better performance)
             
         Returns:
             Import ID for tracking progress
@@ -83,46 +99,24 @@ class SeasonService:
         logging.info(f"Processing batch {batch_number} with batch_size {batch_size} for import {import_id}")
         
         try:
-            # Get table service client for pagination
-            table_client = self.storage_service.get_table_service_client().get_table_client(SHOW_IDS_TABLE)
-            
-            # Calculate skip amount for this batch
-            skip_count = batch_number * batch_size
-            
-            # Query entities with pagination
+            # Use efficient offset-based pagination from StorageService
             filter_query = "PartitionKey eq 'show'"
-            entities_iter = table_client.query_entities(
-                query_filter=filter_query,
-                results_per_page=batch_size
+            offset = batch_number * batch_size
+            
+            # Get only the entities we need for this batch
+            batch_entities = self.storage_service.get_entities(
+                table_name=SHOW_IDS_TABLE,
+                filter_query=filter_query,
+                offset=offset,
+                limit=batch_size
             )
             
-            # Skip to the correct batch
-            current_count = 0
-            batch_entities: list[dict[str, Any]] = []
-            total_processed = 0
-            
-            for entity in entities_iter:
-                # Skip entities until we reach our batch
-                if current_count < skip_count:
-                    current_count += 1
-                    continue
-                    
-                # Collect entities for this batch
-                if len(batch_entities) < batch_size:
-                    batch_entities.append(entity)
-                    total_processed += 1
-                else:
-                    # We have enough for this batch, break to process
-                    break
-                    
-                current_count += 1
-            
             if not batch_entities:
-                logging.info(f"No more entities found in batch {batch_number}. Completing import {import_id}")
+                logging.info(f"No more entities in batch {batch_number}. Completing import {import_id}")
                 self.monitoring_service.complete_show_seasons_import(import_id, ImportStatus.COMPLETED)
                 return import_id
             
-            logging.info(f"Found {len(batch_entities)} shows in batch {batch_number}")
+            logging.info(f"Processing {len(batch_entities)} shows in batch {batch_number}")
             
             # Queue each show ID in this batch for season processing
             queued_count = 0
@@ -132,21 +126,26 @@ class SeasonService:
                     logging.warning(f"Entity missing RowKey, skipping: {show_entity}")
                     continue
                     
-                show_id = int(row_key)
-                show_message: dict[str, Any] = {
-                    "show_id": show_id,
-                    "import_id": import_id
-                }
-                
-                self.storage_service.upload_queue_message(
-                    queue_name=SEASONS_QUEUE,
-                    message=show_message
-                )
-                queued_count += 1
+                try:
+                    show_id = int(row_key)
+                    show_message: dict[str, Any] = {
+                        "show_id": show_id,
+                        "import_id": import_id
+                    }
+                    
+                    self.storage_service.upload_queue_message(
+                        queue_name=SEASONS_QUEUE,
+                        message=show_message
+                    )
+                    queued_count += 1
+                    
+                except (ValueError, TypeError) as e:
+                    logging.warning(f"Invalid show_id format for RowKey {row_key}: {e}")
+                    continue
             
             logging.info(f"Queued {queued_count} shows from batch {batch_number}")
             
-            # Check if there might be more batches by trying to get one more entity
+            # Check if there might be more batches by seeing if we got a full batch
             has_more = len(batch_entities) == batch_size
             
             if has_more:
@@ -171,7 +170,6 @@ class SeasonService:
             
         except Exception as e:
             logging.error(f"Failed to process batch {batch_number} for import {import_id}: {e}")
-            self.monitoring_service.complete_show_seasons_import(import_id, ImportStatus.FAILED)
             raise
 
     def get_show_seasons(self, season_msg: func.QueueMessage) -> None:
@@ -195,7 +193,7 @@ class SeasonService:
                 if action == "process_batch":
                     batch_import_id = msg_data.get("import_id")
                     batch_number = msg_data.get("batch_number")
-                    batch_size = msg_data.get("batch_size", 1000)
+                    batch_size = msg_data.get("batch_size", 100)
                     
                     logging.info(f"Processing batch message for import {batch_import_id}, batch {batch_number}")
                     self._process_shows_batch(
