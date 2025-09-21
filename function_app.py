@@ -7,6 +7,8 @@ from tvbingefriend_season_service.blueprints import bp_start_get_all
 from tvbingefriend_season_service.blueprints import bp_updates_manual
 from tvbingefriend_season_service.blueprints import bp_updates_timer
 from tvbingefriend_season_service.blueprints import bp_get_seasons_by_show_id
+from tvbingefriend_season_service.blueprints import bp_get_season_by_id
+from tvbingefriend_season_service.blueprints import bp_get_season_by_show_and_number
 
 app = func.FunctionApp()
 
@@ -16,3 +18,5 @@ app.register_blueprint(bp_start_get_all)
 app.register_blueprint(bp_updates_manual)
 app.register_blueprint(bp_updates_timer)
 app.register_blueprint(bp_get_seasons_by_show_id)
+app.register_blueprint(bp_get_season_by_id)
+app.register_blueprint(bp_get_season_by_show_and_number)

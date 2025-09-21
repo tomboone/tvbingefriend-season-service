@@ -85,3 +85,47 @@ class SeasonRepository:
         except Exception as e:
             logging.error(f"season_repository.get_seasons_by_show_id: Unexpected error getting seasons for show_id {show_id}: {e}")
             return []
+
+    def get_season_by_id(self, season_id: int, db: Session) -> Season | None:
+        """Get a season by its ID
+
+        Args:
+            season_id (int): Season ID
+            db (Session): Database session
+
+        Returns:
+            Season | None: Season if found, None otherwise
+        """
+        try:
+            season = db.query(Season).filter(Season.id == season_id).first()
+            return season
+        except SQLAlchemyError as e:
+            logging.error(f"season_repository.get_season_by_id: Database error getting season_id {season_id}: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"season_repository.get_season_by_id: Unexpected error getting season_id {season_id}: {e}")
+            return None
+
+    def get_season_by_show_and_number(self, show_id: int, season_number: int, db: Session) -> Season | None:
+        """Get a season by show ID and season number
+
+        Args:
+            show_id (int): Show ID
+            season_number (int): Season number
+            db (Session): Database session
+
+        Returns:
+            Season | None: Season if found, None otherwise
+        """
+        try:
+            season = db.query(Season).filter(
+                Season.show_id == show_id,
+                Season.number == season_number
+            ).first()
+            return season
+        except SQLAlchemyError as e:
+            logging.error(f"season_repository.get_season_by_show_and_number: Database error getting season for show_id {show_id}, season {season_number}: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"season_repository.get_season_by_show_and_number: Unexpected error getting season for show_id {show_id}, season {season_number}: {e}")
+            return None
