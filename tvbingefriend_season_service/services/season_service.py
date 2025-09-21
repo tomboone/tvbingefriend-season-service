@@ -438,3 +438,74 @@ class SeasonService:
         except Exception as e:
             logging.error(f"SeasonService.get_seasons_by_show_id: Error getting seasons for show {show_id}: {e}")
             return []
+
+    def get_season_by_id(self, season_id: int) -> dict[str, Any] | None:
+        """Get a season by its ID
+
+        Args:
+            season_id (int): Season ID
+
+        Returns:
+            dict[str, Any] | None: Season data if found, None otherwise
+        """
+        try:
+            with db_session_manager() as db:
+                season = self.season_repository.get_season_by_id(season_id, db)
+
+                if not season:
+                    return None
+
+                return {
+                    'id': season.id,
+                    'show_id': season.show_id,
+                    'url': season.url,
+                    'number': season.number,
+                    'name': season.name,
+                    'episodeOrder': season.episodeOrder,
+                    'premiereDate': season.premiereDate,
+                    'endDate': season.endDate,
+                    'network': season.network,
+                    'webChannel': season.webChannel,
+                    'image': season.image,
+                    'summary': season.summary,
+                    '_links': season._links
+                }
+        except Exception as e:
+            logging.error(f"SeasonService.get_season_by_id: Error getting season {season_id}: {e}")
+            return None
+
+    def get_season_by_show_and_number(self, show_id: int, season_number: int) -> dict[str, Any] | None:
+        """Get a season by show ID and season number
+
+        Args:
+            show_id (int): Show ID
+            season_number (int): Season number
+
+        Returns:
+            dict[str, Any] | None: Season data if found, None otherwise
+        """
+        try:
+            with db_session_manager() as db:
+                season = self.season_repository.get_season_by_show_and_number(show_id, season_number, db)
+
+                if not season:
+                    return None
+
+                return {
+                    'id': season.id,
+                    'show_id': season.show_id,
+                    'url': season.url,
+                    'number': season.number,
+                    'name': season.name,
+                    'episodeOrder': season.episodeOrder,
+                    'premiereDate': season.premiereDate,
+                    'endDate': season.endDate,
+                    'network': season.network,
+                    'webChannel': season.webChannel,
+                    'image': season.image,
+                    'summary': season.summary,
+                    '_links': season._links
+                }
+        except Exception as e:
+            logging.error(f"SeasonService.get_season_by_show_and_number: Error getting season for show {show_id}, season {season_number}: {e}")
+            return None
