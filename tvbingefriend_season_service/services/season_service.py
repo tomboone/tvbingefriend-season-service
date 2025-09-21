@@ -416,10 +416,9 @@ class SeasonService:
         try:
             with db_session_manager() as db:
                 seasons = self.season_repository.get_seasons_by_show_id(show_id, db)
-                season_list = []
-                for season in seasons:
-                    # Convert Season object to dictionary
-                    season_dict = {
+                # Optimized serialization using list comprehension
+                return [
+                    {
                         'id': season.id,
                         'show_id': season.show_id,
                         'url': season.url,
@@ -434,8 +433,8 @@ class SeasonService:
                         'summary': season.summary,
                         '_links': season._links
                     }
-                    season_list.append(season_dict)
-                return season_list
+                    for season in seasons
+                ]
         except Exception as e:
             logging.error(f"SeasonService.get_seasons_by_show_id: Error getting seasons for show {show_id}: {e}")
             return []

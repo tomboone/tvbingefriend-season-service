@@ -1,5 +1,5 @@
 """SQLAlchemy model for a season."""
-from sqlalchemy import String, Integer, Text
+from sqlalchemy import String, Integer, Text, Index
 from sqlalchemy.orm import mapped_column, Mapped
 from sqlalchemy.dialects.mysql import JSON
 
@@ -24,3 +24,9 @@ class Season(Base):
     image: Mapped[dict | None] = mapped_column(JSON)
     summary: Mapped[str | None] = mapped_column(Text)
     _links: Mapped[dict | None] = mapped_column(JSON)
+
+    # Indexes for query optimization
+    __table_args__ = (
+        Index('idx_seasons_show_number', 'show_id', 'number'),
+        Index('idx_seasons_show_id', 'show_id'),
+    )

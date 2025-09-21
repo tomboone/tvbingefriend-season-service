@@ -72,7 +72,12 @@ class SeasonRepository:
             list[Season]: List of seasons ordered by number
         """
         try:
-            seasons = db.query(Season).filter(Season.show_id == show_id).order_by(Season.number).all()
+            # Optimized query with limit for typical TV shows (most have < 20 seasons)
+            seasons = (db.query(Season)
+                      .filter(Season.show_id == show_id)
+                      .order_by(Season.number)
+                      .limit(50)  # Reasonable limit for TV show seasons
+                      .all())
             return seasons
         except SQLAlchemyError as e:
             logging.error(f"season_repository.get_seasons_by_show_id: Database error getting seasons for show_id {show_id}: {e}")
