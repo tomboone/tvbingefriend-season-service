@@ -403,3 +403,39 @@ class SeasonService:
                 })
         
         return retry_summary
+
+    def get_seasons_by_show_id(self, show_id: int) -> list[dict[str, Any]]:
+        """Get all seasons for a show by its ID
+
+        Args:
+            show_id (int): Show ID
+
+        Returns:
+            list[dict[str, Any]]: List of season data ordered by season number
+        """
+        try:
+            with db_session_manager() as db:
+                seasons = self.season_repository.get_seasons_by_show_id(show_id, db)
+                season_list = []
+                for season in seasons:
+                    # Convert Season object to dictionary
+                    season_dict = {
+                        'id': season.id,
+                        'show_id': season.show_id,
+                        'url': season.url,
+                        'number': season.number,
+                        'name': season.name,
+                        'episodeOrder': season.episodeOrder,
+                        'premiereDate': season.premiereDate,
+                        'endDate': season.endDate,
+                        'network': season.network,
+                        'webChannel': season.webChannel,
+                        'image': season.image,
+                        'summary': season.summary,
+                        '_links': season._links
+                    }
+                    season_list.append(season_dict)
+                return season_list
+        except Exception as e:
+            logging.error(f"SeasonService.get_seasons_by_show_id: Error getting seasons for show {show_id}: {e}")
+            return []

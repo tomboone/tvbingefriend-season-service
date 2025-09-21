@@ -24,5 +24,9 @@
       "newBatchThreshold": 1
     }
   },
-  "functionTimeout": "00:05:00"
+  "functionTimeout": "00:05:00",
+  "cors": {
+    "allowedOrigins": ["http://localhost:5173", "http://localhost:3000"],
+    "supportCredentials": false
+  }
 }
