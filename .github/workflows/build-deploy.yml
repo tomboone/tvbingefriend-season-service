@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to Azure
         uses: azure/login@v1
@@ -94,7 +94,7 @@ jobs:
       PYTHON_VERSION: ${{ needs.terraform.outputs.function_app_python_version }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
         uses: actions/setup-python@v4
