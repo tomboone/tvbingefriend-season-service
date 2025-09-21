@@ -60,3 +60,23 @@ class SeasonRepository:
             logging.error(
                 f"season_repository.upsert_season: Unexpected error during upsert of season season_id {season_id}: {e}"
             )
+
+    def get_seasons_by_show_id(self, show_id: int, db: Session) -> list[Season]:
+        """Get all seasons for a show by its ID
+
+        Args:
+            show_id (int): Show ID
+            db (Session): Database session
+
+        Returns:
+            list[Season]: List of seasons ordered by number
+        """
+        try:
+            seasons = db.query(Season).filter(Season.show_id == show_id).order_by(Season.number).all()
+            return seasons
+        except SQLAlchemyError as e:
+            logging.error(f"season_repository.get_seasons_by_show_id: Database error getting seasons for show_id {show_id}: {e}")
+            return []
+        except Exception as e:
+            logging.error(f"season_repository.get_seasons_by_show_id: Unexpected error getting seasons for show_id {show_id}: {e}")
+            return []
