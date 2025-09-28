@@ -163,7 +163,9 @@ resource "azurerm_linux_function_app_slot" "stage" {
     application_stack {
       python_version = "3.12"
     }
+    cors {
       allowed_origins = var.allowed_origins
+    }
   }
 
   app_settings = {
