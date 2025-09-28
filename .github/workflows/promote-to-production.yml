@@ -13,12 +13,6 @@ env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
   ARM_USE_OIDC: true
-  TF_VAR_tf_shared_resource_group_name: ${{ secrets.TF_STATE_RESOURCE_GROUP_NAME }}
-  TF_VAR_tf_shared_storage_account_name: ${{ secrets.TF_STATE_STORAGE_ACCOUNT_NAME }}
-  TF_VAR_tf_shared_container_name: ${{ secrets.TF_STATE_CONTAINER_NAME }}
-  TF_VAR_tf_shared_key: ${{ secrets.TF_STATE_KEY }}
-  TF_VAR_mysql_admin_username: ${{ secrets.MYSQL_ADMIN_USERNAME }}
-  TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
   TF_WORKING_DIR: ./terraform
 
 
@@ -122,21 +116,14 @@ jobs:
           --output json)
         
         CONNECTION_STRING=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="SQLALCHEMY_CONNECTION_STRING") | .value')
-        SSL_CA_CONTENT=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="MYSQL_SSL_CA_CONTENT") | .value')
         
         if [[ -z "$CONNECTION_STRING" || "$CONNECTION_STRING" == "null" ]]; then
           echo "::error::SQLALCHEMY_CONNECTION_STRING not found in production app settings"
           exit 1
         fi
         
-        if [[ -z "$SSL_CA_CONTENT" || "$SSL_CA_CONTENT" == "null" ]]; then
-          echo "::error::MYSQL_SSL_CA_CONTENT not found in production app settings"
-          exit 1
-        fi
-        
         echo "Running Alembic migrations on Production DB..."
         export SQLALCHEMY_CONNECTION_STRING="$CONNECTION_STRING"
-        export MYSQL_SSL_CA_CONTENT="$SSL_CA_CONTENT"
         
         # Run migration from the repo root where alembic.ini exists
         poetry run python -m alembic -c alembic.ini upgrade head

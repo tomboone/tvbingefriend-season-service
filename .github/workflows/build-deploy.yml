@@ -1,4 +1,4 @@
-#file: noinspection UndefinedAction
+#file: noinspection UndefinedAction,UndefinedParamsPresent
 name: Terraform, Build, and Deploy to Stage
 
 on:
@@ -32,6 +32,7 @@ env:
   TF_VAR_tf_shared_storage_account_name: ${{ secrets.TF_SHARED_STORAGE_ACCOUNT_NAME }}
   TF_VAR_tf_shared_container_name: ${{ secrets.TF_SHARED_CONTAINER_NAME }}
   TF_VAR_tf_shared_key: ${{ secrets.TF_SHARED_KEY }}
+  TF_VAR_allowed_origins: ${{ secrets.ALLOWED_ORIGINS }}
   TF_VAR_mysql_admin_username: ${{ secrets.MYSQL_ADMIN_USER }}
   TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
   TF_WORKING_DIR: ./terraform
@@ -176,22 +177,15 @@ jobs:
             --resource-group "$RG_NAME")
             
           CONNECTION_STRING=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="SQLALCHEMY_CONNECTION_STRING") | .value')
-          SSL_CA_CONTENT=$(echo "$SETTINGS" | jq -r '.[] | select(.name=="MYSQL_SSL_CA_CONTENT") | .value')
           
           if [[ -z "$CONNECTION_STRING" || "$CONNECTION_STRING" == "null" ]]; then
             echo "::error::SQLALCHEMY_CONNECTION_STRING not found in app settings"
             exit 1
           fi
           
-          if [[ -z "$SSL_CA_CONTENT" || "$SSL_CA_CONTENT" == "null" ]]; then
-            echo "::error::MYSQL_SSL_CA_CONTENT not found in app settings"
-            exit 1
-          fi
-          
           echo "Running Alembic migrations on Stage DB..."
           export PYTHONPATH=$(pwd)/app/.python_packages/lib/site-packages
           export SQLALCHEMY_CONNECTION_STRING="$CONNECTION_STRING"
-          export MYSQL_SSL_CA_CONTENT="$SSL_CA_CONTENT"
           
           cd app
       

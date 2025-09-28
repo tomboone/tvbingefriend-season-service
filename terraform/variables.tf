@@ -24,3 +24,7 @@ variable "mysql_admin_password" {
   description = "MySQL flexible server admin password"
   sensitive   = true
 }
+
+variable "allowed_origins" {
+  type = list(string)
+}

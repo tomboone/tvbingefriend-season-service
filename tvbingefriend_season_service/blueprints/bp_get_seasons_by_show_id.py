@@ -10,7 +10,7 @@ bp: func.Blueprint = func.Blueprint()
 
 
 @bp.function_name(name="get_seasons_by_show_id")
-@bp.route(route="shows/{show_id:int}/seasons", methods=["GET"])
+@bp.route(route="shows/{show_id:int}/seasons", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def get_seasons_by_show_id(req: func.HttpRequest) -> func.HttpResponse:
     """Get all seasons for a show by its ID
 
