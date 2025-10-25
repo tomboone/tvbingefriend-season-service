@@ -128,7 +128,7 @@ jobs:
           zip -r ../python-app.zip .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: python-app
           path: python-app.zip
